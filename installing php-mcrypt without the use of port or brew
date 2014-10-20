@@ -1,0 +1,106 @@
+
+17
+down vote
+Installing php-mcrypt without the use of port or brew
+Note: these instructions are long because they intend to be thorough. The process is actually fairly straight-forward. If you're an optimist, you can skip down to the building the mcrypt extension section, but you may very well see the errors I did, telling me to install autoconf and libmcrypt first.
+
+I have just gone through this on a fresh install of OSX 10.9. The solution which worked for me was very close to that of ckm - I am including their steps as well as my own in full, for completeness. My main goal (other than "having mcrypt") was to perform the installation in a way which left the least impact on the system as a whole. That means doing things manually (no port, no brew)
+
+To do things manually, you will first need a couple of dependencies: one for building PHP modules, and another for mcrypt specifically. These are autoconf and libmcrypt, either of which you might have already, but neither of which you will have on a fresh install of OSX 10.9.
+
+autoconf
+
+Autoconf (for lack of a better description) is used to tell not-quite-disparate, but still very different, systems how to compile things. It allows you to use the same set of basic commands to build modules on Linux as you would on OSX, for example, despite their different file-system hierarchies, etc. I used the method described by Ares on StackOverflow, which I will reproduce here for completeness. This one is very straight-forward:
+
+$ mkdir -p ~/mcrypt/dependencies/autoconf
+$ cd ~/mcrypt/dependencies/autoconf
+$ curl -OL http://ftpmirror.gnu.org/autoconf/autoconf-latest.tar.gz
+$ tar xzf autoconf-latest.tar.gz
+$ cd autoconf-*/
+$ ./configure --prefix=/usr/local
+$ make
+$ sudo make install
+Next, verify the installation by running:
+
+$ which autoconf
+which should return /usr/local/bin/autoconf
+
+libmcrypt
+
+Next, you will need libmcrypt, used to provide the guts of the mcrypt extension (the extension itself being a provision of a PHP interface into this library). The method I used was based on the one described here, but I have attempted to simplify things as best I can:
+
+First, download the libmcrypt source, available from SourceForge, and available as of the time of this writing, specifically, at:
+
+http://sourceforge.net/projects/mcrypt/files/Libmcrypt/2.5.8/libmcrypt-2.5.8.tar.bz2/download
+
+You'll need to jump through the standard SourceForge hoops to get at the real download link, but once you have it, you can pass it in to something like this:
+
+$ mkdir -p ~/mcrypt/dependencies/libmcrypt
+$ cd ~/mcrypt/dependencies/libmcrypt
+$ curl -o curl -o libmcrypt.tar.bz2 '<SourceForge direct link URL>'
+$ tar xjf libmcrypt.tar.bz2
+$ cd libmcrypt-*/
+$ ./configure
+$ make
+$ sudo make install
+The only way I know of to verify that this has worked is via the ./configure step for the mcrypt extension itself (below)
+
+building the mcrypt extension
+
+This is our actual goal. Hopefully the brief stint into dependency hell is over now.
+
+First, we're going to need to get the source code for the mcrypt extension. This is most-readily available buried within the source code for all of PHP. So: determine what version of the PHP source code you need.
+
+$ php --version # to get your PHP version
+now, if you're lucky, your current version will be available for download from the main mirrors. If it is, you can type something like:
+
+$ mkdir -p ~/mcrypt/php
+$ cd ~/mcrypt/php
+$ curl -L -o php-5.4.17.tar.bz2 http://www.php.net/get/php-5.4.17.tar.bz2/from/a/mirror
+Unfortunately, my current version (5.4.17, in this case) was not available, so I needed to use the alternative/historical links at http://downloads.php.net/stas/ (also an official PHP download site). For these, you can use something like:
+
+$ mkdir -p ~/mcrypt/php
+$ cd ~/mcrypt/php
+$ curl -LO http://downloads.php.net/stas/php-5.4.17.tar.bz2
+Again, based on your current version.
+
+Once you have it, (and all the dependencies, from above), you can get to the main process of actually building/installing the module.
+
+$ cd ~/mcrypt/php
+$ tar xjf php-*.tar.bz2
+$ cd php-*/ext/mcrypt
+$ phpize
+$ ./configure # this is the step which fails without the above dependencies
+$ make
+$ make test
+$ sudo make install
+In theory, mcrypt.so is now in your PHP extension directory. Next, we need to tell PHP about it.
+
+configuring the mcrypt extension
+
+Your php.ini file needs to be told to load mcrypt. By default in OSX 10.9, it actually has mcrypt-specific configuration information, but it doesn't actually activate mcrypt unless you tell it to.
+
+The php.ini file does not, by default, exist. Instead, the file /private/etc/php.ini.default lists the default configuration, and can be used as a good template for creating the "true" php.ini, if it does not already exist.
+
+To determine whether php.ini already exists, run:
+
+$ ls /private/etc/php.ini
+If there is a result, it already exists, and you should skip the next command.
+
+To create the php.ini file, run:
+
+$ sudo cp /private/etc/php.ini.default /private/etc/php.ini
+Next, you need to add the line:
+
+extension=mcrypt.so
+Somewhere in the file. I would recommend searching the file for ;extension=, and adding it immediately prior to the first occurrence.
+
+Once this is done, the installation and configuration is complete. You can verify that this has worked by running:
+
+php -m | grep mcrypt
+Which should output "mcrypt", and nothing else.
+
+If your use of PHP relies on Apache's httpd, you will need to restart it before you will notice the changes on the web. You can do so via:
+
+$ sudo apachectl restart
+And you're done.
